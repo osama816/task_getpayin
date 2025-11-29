@@ -73,7 +73,6 @@ class HoldService
                     throw $e;
                 }
 
-                // Exponential backoff
                 usleep(self::RETRY_DELAY_MS[$retries - 1] * 1000);
                 Log::warning("Retrying hold creation", [
                     'attempt' => $retries,

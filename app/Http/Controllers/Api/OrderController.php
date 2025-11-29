@@ -1,66 +1,85 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
-use App\Models\Order;
-use App\Http\Requests\StoreOrderRequest;
-use App\Http\Requests\UpdateOrderRequest;
+use App\Http\Controllers\Controller;
+use App\Services\OrderService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use OpenApi\Attributes as OA;
 
 class OrderController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        //
+    public function __construct(
+        private OrderService $orderService
+    ) {
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    #[OA\Post(
+        path: "/api/orders",
+        summary: "Create an order from an existing hold",
+        tags: ["Orders"],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ["hold_id"],
+                properties: [
+                    new OA\Property(property: "hold_id", type: "integer", example: 1, description: "Hold ID")
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 201,
+                description: "Order created successfully",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "order_id", type: "integer", example: 1),
+                        new OA\Property(property: "total_amount", type: "string", example: "199.98"),
+                        new OA\Property(property: "status", type: "string", example: "pending", enum: ["pending", "paid", "cancelled"])
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 400,
+                description: "Bad request (hold expired, already used, or other error)",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "message", type: "string", example: "Hold has expired")
+                    ]
+                )
+            ),
+            new OA\Response(
+                response: 422,
+                description: "Validation error",
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: "errors", type: "object")
+                    ]
+                )
+            )
+        ]
+    )]
+    public function store(Request $request): JsonResponse
     {
-        //
-    }
+        $validator = Validator::make($request->all(), [
+            'hold_id' => 'required|integer|exists:holds,id',
+        ]);
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(StoreOrderRequest $request)
-    {
-        //
-    }
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(Order $order)
-    {
-        //
-    }
+        try {
+            $result = $this->orderService->createOrder($request->input('hold_id'));
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Order $order)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(UpdateOrderRequest $request, Order $order)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Order $order)
-    {
-        //
+            return response()->json($result, 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 400);
+        }
     }
 }
+
